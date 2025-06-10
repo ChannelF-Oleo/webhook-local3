@@ -3,8 +3,21 @@ export default function handler(req, res) {
 
   const nombre = body.queryResult?.parameters?.nombre || 'cliente';
   const personas = body.queryResult?.parameters?.personas || 'varias';
-  const fecha = body.queryResult?.parameters?.fecha || 'una fecha';
-  const hora = body.queryResult?.parameters?.hora || 'una hora';
+
+  // Recibe fecha y hora en formato ISO o string
+  const rawFecha = body.queryResult?.parameters?.fecha || '';
+  const rawHora = body.queryResult?.parameters?.hora || '';
+
+  // Procesar la fecha para obtener solo la parte de la fecha
+  const fecha = rawFecha ? new Date(rawFecha).toLocaleDateString('es-ES', {
+    year: 'numeric', month: 'long', day: 'numeric'
+  }) : 'una fecha';
+
+  // Procesar la hora para obtener solo la parte de la hora
+  const hora = rawHora ? new Date(rawHora).toLocaleTimeString('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit'
+  }) : 'una hora';
 
   const frases = [
     `¡Perfecto, ${nombre}! Tu reserva para ${personas} personas el ${fecha} a las ${hora} está lista. ¡Gracias por elegir Local 3!`,
