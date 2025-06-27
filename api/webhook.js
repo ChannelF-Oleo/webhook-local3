@@ -43,6 +43,8 @@ export default async function handler(req, res) {
     const personas = body?.queryResult?.parameters?.personas;
     const rawFecha = body?.queryResult?.parameters?.fecha;
     const rawHora = body?.queryResult?.parameters?.hora;
+    const contacto = body?.queryResult?.parameters?.contacto || '';
+    const comentario = body?.queryResult?.parameters?.comentario || '';
 
     if (!nombre || !personas || !rawFecha || !rawHora) {
       return res.status(400).json({
@@ -61,7 +63,7 @@ export default async function handler(req, res) {
     const horaFormateada = new Date(rawHora).toLocaleTimeString('es-ES', {
       hour: 'numeric',
       minute: '2-digit',
-      hour12: true,  // Aquí el cambio para formato 12h con AM/PM
+      hour12: true,
     });
 
     const fraseElegida = generarFrase(nombre, personas, fechaFormateada, horaFormateada);
@@ -73,18 +75,18 @@ export default async function handler(req, res) {
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'Reservas!A:G',  // Cambié a nombre correcto de la hoja + rango
+        range: 'Reservas!A:G',
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [
             [
-              new Date().toLocaleString('es-ES', { hour12: true }), // registro de fecha/hora de reserva con formato 12h
+              new Date().toLocaleString('es-ES', { hour12: true }), // Timestamp
               nombre,
               personas,
               fechaFormateada,
               horaFormateada,
-              fraseElegida,
-              'Reserva confirmada',
+              contacto,
+              comentario,
             ],
           ],
         },
