@@ -6,17 +6,17 @@ const PRIVATE_KEY = process.env.GOOGLE_PRIVATE_KEY?.replace(/\\n/g, '\n');
 const SPREADSHEET_ID = process.env.SPREADSHEET_ID;
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// Configuración de Google Sheets
+// Configuración de Google Sheets con autenticación JWT
 const auth = new google.auth.JWT(CLIENT_EMAIL, null, PRIVATE_KEY, SCOPES);
 const sheets = google.sheets({ version: 'v4', auth });
 
-// Capitalizar solo primera letra
+// Capitalizar solo la primera letra
 function capitalizar(texto) {
   if (!texto || typeof texto !== 'string') return '';
   return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
 }
 
-// Frases aleatorias
+// Frases aleatorias para confirmación
 function generarFrase(nombre, personas, fecha, hora) {
   const frases = [
     `¡Perfecto, ${nombre}! Tu reserva para ${personas} personas el ${fecha} a las ${hora} está lista. ¡Gracias por elegir Local 3!`,
@@ -38,7 +38,7 @@ export default async function handler(req, res) {
   try {
     const body = req.body;
 
-    // Validación de parámetros
+    // Extraer y validar parámetros
     const nombre = capitalizar(body?.queryResult?.parameters?.nombre);
     const personas = body?.queryResult?.parameters?.personas;
     const rawFecha = body?.queryResult?.parameters?.fecha;
@@ -51,32 +51,34 @@ export default async function handler(req, res) {
       });
     }
 
-    // Procesar fecha y hora lo antes posible
+    // Formatear fecha y hora en español (12 horas con AM/PM)
     const fechaFormateada = new Date(rawFecha).toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
     });
+
     const horaFormateada = new Date(rawHora).toLocaleTimeString('es-ES', {
-      hour: '2-digit',
+      hour: 'numeric',
       minute: '2-digit',
+      hour12: true,  // Aquí el cambio para formato 12h con AM/PM
     });
 
     const fraseElegida = generarFrase(nombre, personas, fechaFormateada, horaFormateada);
 
-    // Enviar respuesta al usuario INMEDIATAMENTE
+    // Responder rápido al usuario para que no espere
     res.status(200).json({ fulfillmentText: fraseElegida });
 
-    // Intentar registrar en Google Sheets de manera asíncrona
+    // Guardar en Google Sheets asincrónicamente
     try {
       await sheets.spreadsheets.values.append({
         spreadsheetId: SPREADSHEET_ID,
-        range: 'A:G',
+        range: 'Reservas!A:G',  // Cambié a nombre correcto de la hoja + rango
         valueInputOption: 'USER_ENTERED',
         requestBody: {
           values: [
             [
-              new Date().toLocaleString('es-ES'),
+              new Date().toLocaleString('es-ES', { hour12: true }), // registro de fecha/hora de reserva con formato 12h
               nombre,
               personas,
               fechaFormateada,
@@ -87,11 +89,10 @@ export default async function handler(req, res) {
           ],
         },
       });
-      console.log(`Reserva registrada en Sheets: ${nombre}, ${personas} personas, ${fechaFormateada} a las ${horaFormateada}`);
+      console.log(`Reserva registrada: ${nombre}, ${personas} personas, ${fechaFormateada} a las ${horaFormateada}`);
     } catch (errorSheets) {
-      console.error('Error al registrar en Google Sheets:', errorSheets.message);
+      console.error('Error registrando en Sheets:', errorSheets.message);
     }
-
   } catch (error) {
     console.error('Error general en webhook:', error.message);
     return res.status(500).json({
