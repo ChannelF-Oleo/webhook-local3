@@ -1,17 +1,12 @@
 import { google } from 'googleapis';
-import fs from 'fs';
-import path from 'path';
 
-// Cargar credenciales del archivo JSON
-const credentialsPath = path.join(process.cwd(), 'credentials.json');
-const credentials = JSON.parse(fs.readFileSync(credentialsPath, 'utf-8'));
 const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 
-// Autenticación
+// Configura el cliente JWT con las variables de entorno de Vercel
 const auth = new google.auth.JWT(
-  credentials.client_email,
+  process.env.GOOGLE_CLIENT_EMAIL,
   null,
-  credentials.private_key,
+  process.env.GOOGLE_PRIVATE_KEY.replace(/\\n/g, '\n'),
   SCOPES
 );
 
@@ -23,20 +18,26 @@ export default async function handler(req, res) {
   const nombre = body.queryResult?.parameters?.nombre || 'cliente';
   const personas = body.queryResult?.parameters?.personas || 'varias';
 
-  // Recibe fecha y hora en formato ISO o string
+  // Fecha y hora recibidas en ISO o string
   const rawFecha = body.queryResult?.parameters?.fecha || '';
   const rawHora = body.queryResult?.parameters?.hora || '';
 
-  // Procesar la fecha para obtener solo la parte de la fecha
-  const fecha = rawFecha ? new Date(rawFecha).toLocaleDateString('es-ES', {
-    year: 'numeric', month: 'long', day: 'numeric'
-  }) : 'una fecha';
+  // Formatear la fecha para español
+  const fecha = rawFecha
+    ? new Date(rawFecha).toLocaleDateString('es-ES', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    : 'una fecha';
 
-  // Procesar la hora para obtener solo la parte de la hora
-  const hora = rawHora ? new Date(rawHora).toLocaleTimeString('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit'
-  }) : 'una hora';
+  // Formatear la hora para español
+  const hora = rawHora
+    ? new Date(rawHora).toLocaleTimeString('es-ES', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })
+    : 'una hora';
 
   const frases = [
     `¡Perfecto, ${nombre}! Tu reserva para ${personas} personas el ${fecha} a las ${hora} está lista. ¡Gracias por elegir Local 3!`,
@@ -64,13 +65,14 @@ export default async function handler(req, res) {
             fecha,
             hora,
             fraseElegida,
-            'Reserva confirmada'
-          ]
-        ]
-      }
+            'Reserva confirmada',
+          ],
+        ],
+      },
     });
   } catch (error) {
-    console.error('Error al escribir en Google Sheets:', error);
+    console.error('Error al escribir en Google Sheets:', error.response?.data || error);
+    return res.status(500).json({ fulfillmentText: 'Hubo un problema al registrar tu reserva. Por favor, inténtalo de nuevo.' });
   }
 
   res.status(200).json({ fulfillmentText: fraseElegida });
