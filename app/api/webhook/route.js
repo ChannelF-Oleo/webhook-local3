@@ -1,16 +1,23 @@
 import { createClient } from '@supabase/supabase-js';
+import { NextResponse } from 'next/server';
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.SUPABASE_ANON_KEY;
+
+// Validación temprana de variables de entorno
+if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+  console.error('Error: Variables de entorno SUPABASE_URL o SUPABASE_ANON_KEY no configuradas.');
+  // Esto no puede estar en runtime porque Next.js no permite exportar el handler si esto falla,
+  // pero se deja aquí para recordatorio.
+}
+
 const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-// Capitalizar solo la primera letra
 function capitalizar(texto) {
   if (!texto || typeof texto !== 'string') return '';
   return texto.charAt(0).toUpperCase() + texto.slice(1).toLowerCase();
 }
 
-// Frases aleatorias para confirmación
 function generarFrase(nombre, personas, fecha, hora) {
   const frases = [
     `¡Perfecto, ${nombre}! Tu reserva para ${personas} personas el ${fecha} a las ${hora} está lista. ¡Gracias por elegir Local 3!`,
@@ -24,29 +31,53 @@ function generarFrase(nombre, personas, fecha, hora) {
   return frases[Math.floor(Math.random() * frases.length)];
 }
 
-// Handler del webhook
 export async function POST(request) {
   try {
+    // Validación adicional de variables de entorno en runtime
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+      console.error('Variables de entorno faltantes en runtime.');
+      return NextResponse.json({
+        fulfillmentText: 'Error de configuración interna. Contacta al administrador.',
+      }, { status: 500 });
+    }
+
     const body = await request.json();
 
-    const nombre = capitalizar(body?.queryResult?.parameters?.nombre);
-    const personas = body?.queryResult?.parameters?.personas;
-    const rawFecha = body?.queryResult?.parameters?.fecha;
-    const rawHora = body?.queryResult?.parameters?.hora;
-    const contacto = body?.queryResult?.parameters?.contacto || '';
-    const comentario = body?.queryResult?.parameters?.comentario || '';
+    // Validar que body.queryResult.parameters exista y tenga los datos
+    const params = body?.queryResult?.parameters;
+    if (!params) {
+      console.warn('No se recibieron parámetros en body.queryResult.parameters.');
+      return NextResponse.json({
+        fulfillmentText: 'No se recibieron datos suficientes para procesar la reserva.',
+      }, { status: 400 });
+    }
+
+    const nombre = capitalizar(params.nombre);
+    const personas = params.personas;
+    const rawFecha = params.fecha;
+    const rawHora = params.hora;
+    const contacto = params.contacto || '';
+    const comentario = params.comentario || '';
 
     if (!nombre || !personas || !rawFecha || !rawHora) {
-      return Response.json({
+      return NextResponse.json({
         fulfillmentText:
           'Por favor, proporciona todos los datos necesarios para reservar: nombre, fecha, hora y número de personas.',
       }, { status: 400 });
     }
 
-    // Formatear fecha y hora en español
+    // Validar que las fechas sean válidas
     const fechaObj = new Date(rawFecha);
     const horaObj = new Date(rawHora);
 
+    if (isNaN(fechaObj.getTime()) || isNaN(horaObj.getTime())) {
+      return NextResponse.json({
+        fulfillmentText:
+          'La fecha o la hora proporcionadas no son válidas. Por favor, verifica e intenta nuevamente.',
+      }, { status: 400 });
+    }
+
+    // Formatear fecha y hora en español
     const fechaFormateada = fechaObj.toLocaleDateString('es-ES', {
       year: 'numeric',
       month: 'long',
@@ -76,20 +107,18 @@ export async function POST(request) {
 
     if (error) {
       console.error('Error registrando en Supabase:', error.message);
-      return Response.json({
+      return NextResponse.json({
         fulfillmentText:
           'Lo siento, hubo un problema al registrar tu reserva. Intenta de nuevo más tarde.',
       }, { status: 500 });
     }
 
-    // Respuesta a Dialogflow
-    return Response.json({
+    return NextResponse.json({
       fulfillmentText: fraseElegida,
     });
-
   } catch (error) {
     console.error('Error general en webhook:', error.message);
-    return Response.json({
+    return NextResponse.json({
       fulfillmentText:
         'Lo siento, ocurrió un error procesando tu reserva. Por favor, intenta más tarde.',
     }, { status: 500 });
